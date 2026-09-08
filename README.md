@@ -13,8 +13,8 @@ Open http://127.0.0.1:5000
 Open /admin/login
 
 Development defaults:
-- Username: admin
-- Password: change-me-now
+- Username: Sujeet singh
+- Password: Sujeet@123
 
 For deployment, set SECRET_KEY, ADMIN_USERNAME and ADMIN_PASSWORD as environment variables.
 
