@@ -51,27 +51,186 @@ def home(): return render_template("index.html")
 
 @app.post("/api/check")
 def check():
-    d=request.get_json()
+    d = request.get_json()
+
     try:
-        age=int(d["age"]); h=float(d["height"]); w=float(d["weight"])
-    except Exception: return jsonify(error="Please enter valid age, height and weight."),400
-    if not (1<=age<=120 and 50<=h<=250 and 10<=w<=400): return jsonify(error="Please enter realistic values."),400
-    lang=d.get("language","en"); problem=(d.get("problem") or "").lower()
-    bmi=round(w/(h/100)**2,1)
-    c=conn(); rows=c.execute("SELECT * FROM topics").fetchall(); c.close()
-    matches=[]
+        age = int(d["age"])
+        h = float(d["height"])
+        w = float(d["weight"])
+    except Exception:
+        return jsonify(
+            error="Please enter valid age, height and weight."
+        ), 400
+
+    if not (1 <= age <= 120 and 50 <= h <= 250 and 10 <= w <= 400):
+        return jsonify(
+            error="Please enter realistic values."
+        ), 400
+
+    lang = d.get("language", "en")
+    problem = (d.get("problem") or "").lower()
+    activity = (d.get("activity") or "low").lower()
+
+    bmi = round(w / (h / 100) ** 2, 1)
+
+    # Find matching health topics from the database
+    c = conn()
+    rows = c.execute("SELECT * FROM topics").fetchall()
+    c.close()
+
+    matches = []
+
     for r in rows:
         if any(k.lower() in problem for k in json.loads(r["keywords"])):
-            matches.append({"name":r["name_hi"] if lang=="hi" else r["name"],"summary":r["summary_hi"] if lang=="hi" else r["summary"],"tips":json.loads(r["tips_hi"] if lang=="hi" else r["tips"]),"help":r["help_hi"] if lang=="hi" else r["help"]})
-    if lang=="hi":
-        diet=["सब्जियां, फल, दालें और साबुत अनाज जैसे विविध पौष्टिक भोजन शामिल करें।","अत्यधिक मीठे पेय और बहुत अधिक प्रोसेस्ड भोजन सीमित करें।","यदि चिकित्सकीय सलाह न हो तो पर्याप्त पानी पिएं।"]
-        habits=["अपनी क्षमता और स्वास्थ्य स्थिति के अनुसार नियमित शारीरिक गतिविधि करें।","नियमित और पर्याप्त नींद लेने की कोशिश करें।","लगातार या बढ़ते लक्षणों पर स्वास्थ्य विशेषज्ञ से सलाह लें।"]
-    else:
-        diet=["Include vegetables, fruits, pulses/beans and whole grains in a varied eating pattern.","Limit sugary drinks and heavily processed foods.","Drink water regularly unless a clinician advised fluid restriction."]
-        habits=["Stay physically active at a level appropriate for your health condition.","Aim for regular and adequate sleep.","Discuss persistent or worsening symptoms with a healthcare professional."]
-    urgent=any(x in problem for x in ["chest pain","difficulty breathing","severe bleeding","fainting","सीने में दर्द","सांस लेने में दिक्कत","बेहोशी"])
-    return jsonify(bmi=bmi,status=bmi_message(age,bmi,lang),diet=diet,habits=habits,matches=matches,urgent=urgent,urgent_message=("दर्ज किए गए कुछ लक्षणों में तुरंत चिकित्सकीय जांच की आवश्यकता हो सकती है।" if lang=="hi" else "Some entered symptoms may require urgent medical assessment."))
+            matches.append({
+                "name": r["name_hi"] if lang == "hi" else r["name"],
+                "summary": r["summary_hi"] if lang == "hi" else r["summary"],
+                "tips": json.loads(
+                    r["tips_hi"] if lang == "hi" else r["tips"]
+                ),
+                "help": r["help_hi"] if lang == "hi" else r["help"]
+            })
 
+    diet = []
+    habits = []
+
+    # ---------------- BMI BASED RECOMMENDATIONS ----------------
+
+    if age >= 18:
+        if bmi < 18.5:
+            diet.extend([
+                "Include balanced, nutritious meals regularly.",
+                "Include protein-rich foods such as pulses, beans, dairy or other suitable protein sources.",
+                "Consider discussing unintentional weight changes with a healthcare professional."
+            ])
+
+            habits.extend([
+                "Avoid skipping regular meals.",
+                "Focus on adequate sleep and recovery."
+            ])
+
+        elif bmi < 25:
+            diet.extend([
+                "Continue eating a varied diet with vegetables, fruits and whole grains.",
+                "Include suitable protein sources in your regular meals.",
+                "Limit excessive sugary drinks and heavily processed foods."
+            ])
+
+            habits.extend([
+                "Maintain a regular sleep schedule.",
+                "Continue regular physical activity appropriate for your health."
+            ])
+
+        elif bmi < 30:
+            diet.extend([
+                "Focus on vegetables, fruits, pulses and whole grains.",
+                "Reduce frequent sugary drinks and heavily processed foods.",
+                "Pay attention to regular meal portions."
+            ])
+
+            habits.extend([
+                "Consider gradually increasing daily physical activity if appropriate.",
+                "Avoid sudden or extreme dieting."
+            ])
+
+        else:
+            diet.extend([
+                "Focus on a balanced eating pattern with plenty of nutrient-rich foods.",
+                "Limit frequent sugary drinks and heavily processed foods.",
+                "Consider professional guidance for personalized nutrition advice."
+            ])
+
+            habits.extend([
+                "Start physical activity gradually if it is appropriate for you.",
+                "Discuss personalized health goals with a qualified healthcare professional."
+            ])
+
+    else:
+        diet.extend([
+            "Focus on a varied and nutritious eating pattern.",
+            "Because you are under 18, BMI should be interpreted using age-specific assessment."
+        ])
+
+        habits.append(
+            "Discuss significant growth, nutrition or weight concerns with a qualified healthcare professional."
+        )
+
+    # ---------------- ACTIVITY BASED RECOMMENDATIONS ----------------
+
+    if activity == "low":
+        habits.extend([
+            "Try adding gentle movement or short walks to your daily routine.",
+            "Increase activity gradually according to your comfort and health condition."
+        ])
+
+    elif activity == "moderate":
+        habits.extend([
+            "Maintain regular physical activity and include a mix of movement during the week.",
+            "Take regular breaks from long periods of sitting."
+        ])
+
+    elif activity == "high":
+        diet.extend([
+            "Support your activity level with regular balanced meals.",
+            "Pay attention to hydration, especially during physical activity."
+        ])
+
+        habits.extend([
+            "Allow adequate time for rest and recovery.",
+            "Avoid pushing through persistent pain or concerning symptoms."
+        ])
+
+    # ---------------- SYMPTOM BASED RECOMMENDATIONS ----------------
+
+    if any(word in problem for word in ["headache", "head pain"]):
+        habits.append(
+            "Pay attention to possible triggers such as inadequate sleep, dehydration or prolonged screen time."
+        )
+
+    if any(word in problem for word in ["tired", "fatigue", "weak", "weakness"]):
+        diet.append(
+            "Make sure your regular meals provide adequate overall nutrition."
+        )
+        habits.append(
+            "Persistent or worsening tiredness should be discussed with a healthcare professional."
+        )
+
+    if any(word in problem for word in ["stress", "anxiety", "worried"]):
+        habits.extend([
+            "Try maintaining a regular sleep routine.",
+            "Consider relaxing activities and taking breaks from stressful routines."
+        ])
+
+    # Remove duplicate recommendations
+    diet = list(dict.fromkeys(diet))
+    habits = list(dict.fromkeys(habits))
+
+    urgent_keywords = [
+        "chest pain",
+        "difficulty breathing",
+        "severe bleeding",
+        "fainting",
+        "सीने में दर्द",
+        "सांस लेने में दिक्कत",
+        "बेहोशी"
+    ]
+
+    urgent = any(x in problem for x in urgent_keywords)
+
+    return jsonify(
+        bmi=bmi,
+        status=bmi_message(age, bmi, lang),
+        activity=activity,
+        diet=diet,
+        habits=habits,
+        matches=matches,
+        urgent=urgent,
+        urgent_message=(
+            "दर्ज किए गए कुछ लक्षणों में तुरंत चिकित्सकीय जांच की आवश्यकता हो सकती है।"
+            if lang == "hi"
+            else "Some entered symptoms may require urgent medical assessment."
+        )
+    )
 @app.route("/admin/login",methods=["GET","POST"])
 def admin_login():
     if request.method=="POST":
